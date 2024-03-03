@@ -1,4 +1,7 @@
 import requests
+import pandas as pd
+from datetime import datetime
+from utils.db_utils import *
 
 def fetch_news(api_key, topic, language='en', page_size=100):
     """
@@ -11,7 +14,7 @@ def fetch_news(api_key, topic, language='en', page_size=100):
     - page_size: The number of results to return per page. Maximum is 100.
 
     Returns:
-    A list of articles about the specified topic.
+    A DataFrame containing articles about the specified topic.
     """
     base_url = "https://newsapi.org/v2/everything"
     params = {
@@ -25,19 +28,47 @@ def fetch_news(api_key, topic, language='en', page_size=100):
     
     if response.status_code == 200:
         articles = response.json().get('articles', [])
-        return articles
+        df = pd.DataFrame(articles)
+        return df
     else:
         print(f"Failed to fetch news: {response.status_code}")
-        return []
+        return pd.DataFrame()
+
+def save_to_csv(df, topic):
+    """
+    Saves the DataFrame to a CSV file with a dynamic name that includes the topic and timestamp.
+
+    Parameters:
+    - df: The DataFrame to save.
+    - topic: The news topic, used in the filename.
+    """
+    if not df.empty:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{topic}_{timestamp}.csv"
+        df.to_csv(filename, index=False)
+        print(f"Saved to {filename}")
+    else:
+        print("DataFrame is empty. No CSV file was created.")
 
 # Example usage
 if __name__ == "__main__":
-    YOUR_API_KEY = "9339c10752464c27994cb567c2ca9bfd" # Replace with your actual NewsAPI key
-    TOPIC = "Unicredit" # Replace with your topic of interest
-    articles = fetch_news(YOUR_API_KEY, TOPIC)
+    YOUR_API_KEY = "your_api_key_here"  # Replace with your actual NewsAPI key
+    TOPIC = "Unicredit"  # Replace with your topic of interest
+    df_articles = fetch_news(YOUR_API_KEY, TOPIC)
     
-    for article in articles:
-        print(f"Title: {article['title']}")
-        print(f"Description: {article['description']}")
-        print(f"URL: {article['url']}")
-        print("-" * 80)
+    # Optionally save to database
+    # db_utils.insert_dataframe_into_table(df_articles, "sr_news_newsapi", db_config)
+    db_config = {
+        "host": "pi",
+        "user": "root",
+        "password": "password",
+        "database": "investio"
+    }
+    
+    df_articles = fetch_news(YOUR_API_KEY, TOPIC)
+    if not df_articles.empty:
+        db_utils.create_table_from_df(df_articles, "sr_news_newsapi", db_config)
+        db_utils.insert_dataframe_into_table(df_articles, "sr_news_newsapi", db_config)
+
+    # Save to CSV
+    save_to_csv(df_articles, TOPIC)
